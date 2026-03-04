@@ -1,9 +1,8 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const fetchCache = "force-no-store";
 
 import { NextResponse } from "next/server";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 
