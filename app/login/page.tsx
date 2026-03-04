@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -79,7 +79,7 @@ export default function LoginPage() {
 
       // הצלחה → חוזרים לאיפה שבאנו
       router.replace(nextPath);
-    } catch (err) {
+    } catch {
       setError("שגיאת רשת. נסה שוב.");
     } finally {
       setBusy(false);
@@ -107,9 +107,7 @@ export default function LoginPage() {
           direction: "rtl",
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
-          התחברות
-        </h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>התחברות</h1>
         <p style={{ marginTop: 6, marginBottom: 16, opacity: 0.7 }}>
           התחבר כדי להמשיך
         </p>
@@ -182,10 +180,25 @@ export default function LoginPage() {
           </button>
 
           <div style={{ fontSize: 12, opacity: 0.65 }}>
-            אחרי התחברות נחזור ל: <span style={{ direction: "ltr" }}>{nextPath}</span>
+            אחרי התחברות נחזור ל:{" "}
+            <span style={{ direction: "ltr" }}>{nextPath}</span>
           </div>
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+          טוען...
+        </div>
+      }
+    >
+      <LoginInner />
+    </Suspense>
   );
 }
