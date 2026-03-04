@@ -1,0 +1,52 @@
+{
+  "name": "production-board",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx --yes cross-port-killer 3000 && next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "open": "concurrently \"next dev\" \"wait-on http://localhost:3000 && open http://localhost:3000\"",
+    "start:open": "node scripts/ensure-install.js && npm run open"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "@prisma/adapter-pg": "^7.4.2",
+    "@prisma/client": "^5.22.0",
+    "@react-pdf/renderer": "^3.4.4",
+    "@sparticuz/chromium": "^131.0.0",
+    "bcrypt": "^6.0.0",
+    "dexie": "^4.0.1",
+    "next": "14.2.15",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.19.0",
+    "prisma": "^5.22.0",
+    "puppeteer-core": "^23.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@fontsource/heebo": "^5.2.8",
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^20",
+    "@types/pg": "^8.18.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "cross-port-killer": "^1.4.0",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.15",
+    "kill-port": "^2.0.1",
+    "open": "^10.0.0",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "wait-on": "^7.2.0"
+  }
+}
