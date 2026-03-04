@@ -49,8 +49,7 @@ export async function PATCH(
   }
   const project = await prisma.project.update({
     where: { id },
-    data: name === "" ? undefined : { name },
-  });
+    data: name ? { name } : {},  });
   return NextResponse.json(project);
 }
 
