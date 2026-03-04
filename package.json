@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "npx --yes cross-port-killer 3000 && next dev -p 3000",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "postinstall": "prisma generate",
     "open": "concurrently \"next dev\" \"wait-on http://localhost:3000 && open http://localhost:3000\"",
     "start:open": "node scripts/ensure-install.js && npm run open"
   },
