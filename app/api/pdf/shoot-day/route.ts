@@ -1,10 +1,11 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
 import { renderShootDayHtml } from "@/lib/reports/renderShootDayHtml";
 import type { ShootDayPdfSnapshot } from "@/lib/reports/pdfSnapshotTypes";
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 const isProd = process.env.NODE_ENV === "production";
 
 function getLocalChromeExecutablePath() {
