@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const fetchCache = "force-no-store";
 
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
@@ -20,7 +21,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    const user = await prisma.user.findUnique({
+      where: { username },
+    });
 
     if (!user) {
       return NextResponse.json(
@@ -39,7 +42,10 @@ export async function POST(req: Request) {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+
+    const expiresAt = new Date(
+      Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000
+    );
 
     await prisma.session.create({
       data: {
@@ -49,7 +55,10 @@ export async function POST(req: Request) {
       },
     });
 
-    const res = NextResponse.json({ success: true, userId: user.id });
+    const res = NextResponse.json({
+      success: true,
+      userId: user.id,
+    });
 
     res.cookies.set({
       name: COOKIE_NAME,
@@ -64,6 +73,9 @@ export async function POST(req: Request) {
     return res;
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went wrong" },
+      { status: 500 }
+    );
   }
 }
