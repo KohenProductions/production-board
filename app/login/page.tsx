@@ -77,7 +77,6 @@ function LoginInner() {
         return;
       }
 
-      // הצלחה → חוזרים לאיפה שבאנו
       router.replace(nextPath);
     } catch {
       setError("שגיאת רשת. נסה שוב.");
@@ -183,6 +182,18 @@ function LoginInner() {
             אחרי התחברות נחזור ל:{" "}
             <span style={{ direction: "ltr" }}>{nextPath}</span>
           </div>
+
+          <a
+            href={`/register`}
+            style={{
+              fontSize: 12,
+              opacity: 0.8,
+              textAlign: "center",
+              marginTop: 4,
+            }}
+          >
+            אין לי משתמש — הירשם
+          </a>
         </form>
       </div>
     </div>

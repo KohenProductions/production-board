@@ -20,7 +20,6 @@
     "@prisma/client": "^5.22.0",
     "@react-pdf/renderer": "^3.4.4",
     "@sparticuz/chromium": "^131.0.0",
-    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "dexie": "^4.0.1",
     "next": "14.2.15",
@@ -34,7 +33,6 @@
   },
   "devDependencies": {
     "@fontsource/heebo": "^5.2.8",
-    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.18.0",
     "@types/react": "^18",

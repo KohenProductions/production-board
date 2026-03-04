@@ -1,22 +1,34 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function AuthLogoutButton() {
-  const router = useRouter();
+type AuthLogoutButtonProps = {
+  onAfterLogout?: () => void;
+};
+
+export function AuthLogoutButton({ onAfterLogout }: AuthLogoutButtonProps) {
   const [busy, setBusy] = useState(false);
 
   async function onLogout() {
+    if (busy) return;
     setBusy(true);
+
     try {
-      await fetch("/api/auth/logout", {
+      const res = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
+
+      // גם אם יש כשל – עדיין ננסה “לנקות” את ה־UI
+      if (!res.ok) {
+        // אפשר להוסיף פה toast אם יש לך מערכת הודעות
+      }
+
+      onAfterLogout?.();
+
+      // הכי חשוב: ריפרש קשיח כדי לאפס state של קומפוננטות/תפריטים
+      window.location.assign("/login");
     } finally {
-      router.replace("/login");
-      router.refresh();
       setBusy(false);
     }
   }

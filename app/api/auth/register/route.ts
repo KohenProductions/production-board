@@ -1,56 +1,92 @@
+// app/api/auth/register/route.ts
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const fetchCache = "force-no-store";
 
 import { NextResponse } from "next/server";
-import bcrypt from "bcrypt";
+import crypto from "crypto";
+import bcryptjs from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+
+const COOKIE_NAME = "pb_session";
+const SESSION_DAYS = 30;
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const username = String(body?.username ?? "").trim();
+    const password = String(body?.password ?? "");
 
     if (!username || !password) {
       return NextResponse.json(
-        { error: "Missing username or password" },
+        { error: "חובה למלא שם משתמש וסיסמה" },
         { status: 400 }
       );
     }
 
-    const normalizedUsername = String(username).trim();
-    const usernameRegex = /^[a-zA-Z0-9_]{3,24}$/;
-    if (!usernameRegex.test(normalizedUsername)) {
-      return NextResponse.json(
-        {
-          error:
-            "שם המשתמש חייב להכיל רק אותיות באנגלית, ספרות וקו תחתון, באורך 3 עד 24 תווים",
-        },
-        { status: 400 }
-      );
+    if (username.length < 3) {
+      return NextResponse.json({ error: "שם משתמש קצר מדי" }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { username: normalizedUsername },
+    if (password.length < 4) {
+      return NextResponse.json({ error: "סיסמה קצרה מדי" }, { status: 400 });
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true },
     });
 
-    if (existingUser) {
+    if (existing) {
       return NextResponse.json(
-        { error: "Username already exists" },
-        { status: 400 }
+        { error: "שם המשתמש כבר תפוס" },
+        { status: 409 }
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashed = await bcryptjs.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
-        username: normalizedUsername,
-        password: hashedPassword,
+        username,
+        password: hashed,
+      },
+      select: { id: true, username: true },
+    });
+
+    // יוצרים סשן מיד אחרי רישום (כמו מערכת אמיתית)
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+
+    await prisma.session.create({
+      data: {
+        token,
+        userId: user.id,
+        expiresAt,
       },
     });
 
-    return NextResponse.json({ success: true, userId: user.id });
-  } catch (error) {
-    console.error("REGISTER_ERROR:", error);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+    const res = NextResponse.json({
+      success: true,
+      user: { id: user.id, username: user.username },
+    });
+
+    res.cookies.set({
+      name: COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      expires: expiresAt,
+    });
+
+    return res;
+  } catch (err) {
+    console.error("REGISTER_ERROR:", err);
+    return NextResponse.json(
+      { error: "Something went wrong" },
+      { status: 500 }
+    );
   }
 }

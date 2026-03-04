@@ -1,22 +1,20 @@
+// app/api/auth/logout/route.ts
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const fetchCache = "force-no-store";
 
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 const COOKIE_NAME = "pb_session";
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    const token = req.headers
-      .get("cookie")
-      ?.split(";")
-      .map((c) => c.trim())
-      .find((c) => c.startsWith(`${COOKIE_NAME}=`))
-      ?.split("=")[1];
+    const token = cookies().get(COOKIE_NAME)?.value;
 
     if (token) {
-      await prisma.session.deleteMany({ where: { token } });
+      await prisma.session.delete({ where: { token } }).catch(() => {});
     }
 
     const res = NextResponse.json({ success: true });
@@ -32,8 +30,8 @@ export async function POST(req: Request) {
     });
 
     return res;
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  } catch (err) {
+    console.error("LOGOUT_ERROR:", err);
+    return NextResponse.json({ success: true });
   }
 }

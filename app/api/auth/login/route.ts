@@ -1,9 +1,11 @@
+// app/api/auth/login/route.ts
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const fetchCache = "force-no-store";
 
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import bcryptjs from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 const COOKIE_NAME = "pb_session";
@@ -11,7 +13,9 @@ const SESSION_DAYS = 30;
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const username = String(body?.username ?? "").trim();
+    const password = String(body?.password ?? "");
 
     if (!username || !password) {
       return NextResponse.json(
@@ -31,7 +35,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const ok = await bcrypt.compare(password, user.password);
+    const ok = await bcryptjs.compare(password, user.password);
 
     if (!ok) {
       return NextResponse.json(
@@ -41,22 +45,15 @@ export async function POST(req: Request) {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-
-    const expiresAt = new Date(
-      Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000
-    );
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
 
     await prisma.session.create({
-      data: {
-        token,
-        userId: user.id,
-        expiresAt,
-      },
+      data: { token, userId: user.id, expiresAt },
     });
 
     const res = NextResponse.json({
       success: true,
-      userId: user.id,
+      user: { id: user.id, username: user.username },
     });
 
     res.cookies.set({
@@ -70,9 +67,8 @@ export async function POST(req: Request) {
     });
 
     return res;
-  } catch (error) {
-    console.error(error);
-
+  } catch (err) {
+    console.error("LOGIN_ERROR:", err);
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }

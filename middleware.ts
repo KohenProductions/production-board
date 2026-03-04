@@ -1,49 +1,51 @@
+// middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/register", "/test-auth"];
+const COOKIE_NAME = "pb_session";
+
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/register",
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/logout",
+  "/api/auth/me",
+  "/test-auth",
+  "/_next",
+  "/favicon.ico",
+];
+
+function isPublic(pathname: string) {
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function withSecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return res;
+}
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
 
-  // Allow Next internals + static files
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon.ico") ||
-    pathname.startsWith("/robots.txt") ||
-    pathname.startsWith("/sitemap.xml")
-  ) {
-    return NextResponse.next();
+  if (isPublic(pathname)) {
+    return withSecurityHeaders(NextResponse.next());
   }
 
-  // Allow static assets by extension
-  if (/\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|woff|woff2|ttf|eot)$/.test(pathname)) {
-    return NextResponse.next();
-  }
+  const token = req.cookies.get(COOKIE_NAME)?.value;
 
-  // ✅ Allow ALL API routes (auth + future APIs). Auth is enforced inside /api/auth/* handlers.
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.next();
-  }
-
-  // Allow public pages
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    return NextResponse.next();
-  }
-
-  // Require session cookie
-  const hasSession = req.cookies.get("pb_session")?.value;
-
-  if (!hasSession) {
+  if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    url.searchParams.set("next", pathname + (search || ""));
+    return withSecurityHeaders(NextResponse.redirect(url));
   }
 
-  return NextResponse.next();
+  return withSecurityHeaders(NextResponse.next());
 }
 
 export const config = {
-  matcher: ["/((?!_next).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
