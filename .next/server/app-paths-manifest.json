@@ -1,8 +1,6 @@
 {
-  "/login/page": "app/login/page.js",
-  "/api/auth/me/route": "app/api/auth/me/route.js",
-  "/api/auth/login/route": "app/api/auth/login/route.js",
-  "/api/auth/logout/route": "app/api/auth/logout/route.js",
+  "/project/[id]/page": "app/project/[id]/page.js",
+  "/shoot-day/[id]/page": "app/shoot-day/[id]/page.js",
   "/page": "app/page.js",
-  "/project/[id]/page": "app/project/[id]/page.js"
+  "/shoot-day/[id]/scene/[sceneId]/page": "app/shoot-day/[id]/scene/[sceneId]/page.js"
 }

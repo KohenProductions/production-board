@@ -26,6 +26,17 @@ import { applyTheme } from "./theme/applyTheme";
 
 type ItemDetails = ItemWithDetails["details"];
 
+type ApiProject = {
+  id: string;
+  name: string;
+  clientName: string | null;
+  projectOrderIndex: number | null;
+  colorTag: Project["colorTag"] | null;
+  createdAt: string;
+  updatedAt: string;
+  userId: string;
+};
+
 interface AppState {
   hydrated: boolean;
   currentUserId: string | null;
@@ -79,6 +90,52 @@ const id = () => crypto.randomUUID();
 
 export const LAST_USER_KEY = "asaf:lastUserId";
 
+function sortProjects(projects: Project[]): Project[] {
+  return [...projects].sort((a, b) => {
+    const ai = a.projectOrderIndex ?? Number.MAX_SAFE_INTEGER;
+    const bi = b.projectOrderIndex ?? Number.MAX_SAFE_INTEGER;
+
+    if (ai !== bi) return ai - bi;
+
+    const ad = a.createdAt ?? "";
+    const bd = b.createdAt ?? "";
+
+    if (ad !== bd) return ad.localeCompare(bd);
+
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function mapApiProject(project: ApiProject): Project {
+  return {
+    id: project.id,
+    name: project.name,
+    clientName: project.clientName ?? "",
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    projectOrderIndex: project.projectOrderIndex ?? undefined,
+    colorTag: project.colorTag ?? null,
+  };
+}
+
+async function parseProjectResponse(res: Response): Promise<Project> {
+  const json: unknown = await res.json();
+
+  if (
+    typeof json === "object" &&
+    json !== null &&
+    "project" in json
+  ) {
+    const wrapped = json as { project?: ApiProject };
+    if (!wrapped.project) {
+      throw new Error("Project payload is missing");
+    }
+    return mapApiProject(wrapped.project);
+  }
+
+  return mapApiProject(json as ApiProject);
+}
+
 export const useStore = create<AppState>((set, get) => ({
   hydrated: false,
   currentUserId: null,
@@ -112,7 +169,7 @@ export const useStore = create<AppState>((set, get) => ({
       get().setCurrentUserId(get().users[0]!.id);
     } else {
       get().loadThemeFromCurrentUser();
-      if (get().currentUserId) void get().loadProjects();
+      void get().loadProjects();
     }
   },
 
@@ -178,10 +235,34 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadProjects: async () => {
-    if (process.env.NODE_ENV === "development") console.log("[PB] loadProjects");
-    const uid = get().currentUserId;
-    const projects = await db.getProjects(uid);
-    set({ projects });
+    if (process.env.NODE_ENV === "development") {
+      console.log("[PB] loadProjects from API");
+    }
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (res.status === 401) {
+        set({ projects: [] });
+        return;
+      }
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        throw new Error(j?.error || `Failed to load projects (${res.status})`);
+      }
+
+      const json = (await res.json()) as { projects?: ApiProject[] };
+      const projects = (json.projects ?? []).map(mapApiProject);
+      set({ projects: sortProjects(projects) });
+    } catch (err) {
+      console.error("LOAD_PROJECTS_ERROR:", err);
+      set({ projects: [] });
+    }
   },
 
   loadShootDays: async (projectId: string) => {
@@ -209,53 +290,103 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addProject: async (project) => {
-    const t = now();
-    const uid = get().currentUserId;
-    const existing = await db.getProjects(uid);
-    const nextIndex = existing.length + 1;
-    const full: Project = {
-      ...project,
-      id: id(),
-      createdAt: t,
-      updatedAt: t,
-      projectOrderIndex: nextIndex,
-      ownerUserId: uid ?? undefined,
-    };
-    await db.putProject(full);
-    await get().loadProjects();
-    scheduleAutoBackup();
-    return full;
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: project.name.trim(),
+        clientName: project.clientName?.trim() || null,
+        projectOrderIndex: project.projectOrderIndex ?? undefined,
+        colorTag: project.colorTag ?? null,
+      }),
+    });
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error(j?.error || `Failed to create project (${res.status})`);
+    }
+
+    const created = await parseProjectResponse(res);
+
+    set((state) => ({
+      projects: sortProjects([...state.projects, created]),
+    }));
+
+    return created;
   },
 
-  updateProject: async (id, patch) => {
-    const existing = await db.getProject(id);
-    if (!existing) return;
-    const updated: Project = {
-      ...existing,
-      ...patch,
-      updatedAt: now(),
-    };
-    await db.putProject(updated);
-    await get().loadProjects();
-    scheduleAutoBackup();
+  updateProject: async (projectId, patch) => {
+    const body: Record<string, unknown> = {};
+
+    if (Object.prototype.hasOwnProperty.call(patch, "name")) {
+      body.name = patch.name;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, "clientName")) {
+      body.clientName = patch.clientName ?? null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, "projectOrderIndex")) {
+      body.projectOrderIndex = patch.projectOrderIndex ?? null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, "colorTag")) {
+      body.colorTag = patch.colorTag ?? null;
+    }
+
+    const res = await fetch(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error(j?.error || `Failed to update project (${res.status})`);
+    }
+
+    const updated = await parseProjectResponse(res);
+
+    set((state) => ({
+      projects: sortProjects(
+        state.projects.map((p) => (p.id === projectId ? updated : p))
+      ),
+    }));
   },
 
-  deleteProject: async (id) => {
-    await db.deleteProject(id);
+  deleteProject: async (projectId) => {
+    const res = await fetch(`/api/projects/${projectId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error(j?.error || `Failed to delete project (${res.status})`);
+    }
+
     set((s) => {
-      const { [id]: _, ...restShootDays } = s.shootDays;
+      const { [projectId]: _, ...restShootDays } = s.shootDays;
       return {
-        projects: s.projects.filter((p) => p.id !== id),
+        projects: s.projects.filter((p) => p.id !== projectId),
         shootDays: restShootDays,
       };
     });
-    scheduleAutoBackup();
   },
 
   restoreProject: async (project) => {
-    await db.putProject(project);
-    await get().loadProjects();
-    scheduleAutoBackup();
+    await get().addProject({
+      name: project.name,
+      clientName: project.clientName,
+      projectOrderIndex: project.projectOrderIndex,
+      colorTag: project.colorTag ?? undefined,
+    });
   },
 
   addShootDay: async (day) => {
@@ -348,12 +479,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addTransition: async (t) => {
-    const now = new Date().toISOString();
+    const currentNow = new Date().toISOString();
     const full: Transition = {
       ...t,
       id: id(),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: currentNow,
+      updatedAt: currentNow,
     };
     await db.putTransition(full);
     await get().loadTransitions(full.shootDayId);

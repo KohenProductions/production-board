@@ -28,10 +28,19 @@ export async function POST(req: Request) {
       where: { username },
     });
 
+    // Keep response generic for security
     if (!user) {
       return NextResponse.json(
         { error: "Invalid username or password" },
         { status: 401 }
+      );
+    }
+
+    // NEW: block disabled users immediately (works even if TS types don't include isActive yet)
+    if ((user as any).isActive === false) {
+      return NextResponse.json(
+        { error: "User is disabled" },
+        { status: 403 }
       );
     }
 

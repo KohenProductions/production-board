@@ -7,31 +7,362 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  PRODUCER
+  DIRECTOR
+  CINEMATOGRAPHER
+  CLIENT
+}
+
+enum ProjectRole {
+  PRODUCER
+  DIRECTOR
+  PHOTOGRAPHER
+  CLIENT
+}
+
+enum ItemStatus {
+  OK
+  MISSING
+  BLOCKED
+}
+
+enum SectionType {
+  LOCATIONS
+  SCENES
+  TALENT
+  SCHEDULE
+  CONTACTS
+  NOTES
+  ASSETS
+}
+
+enum ColorTag {
+  pastelRed
+  pastelYellow
+  pastelOrange
+  pastelSky
+  pastelBlue
+  pastelGreen
+  pastelLightGreen
+}
+
+enum ProjectEntityType {
+  LOCATIONS
+  TALENT
+  CREW
+  CONTACTS
+  ASSETS
+}
+
+enum ProductionUpdateChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+}
+
+enum ProductionUpdateRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  OPENED
+  REPLIED
+}
+
 model User {
-  id        String    @id @default(uuid())
-  username  String    @unique
+  id        String   @id @default(uuid())
+  username  String   @unique
   password  String
+
+  role      UserRole @default(PRODUCER)
+  isActive  Boolean  @default(true)
+
   firstName String?
   lastName  String?
   age       Int?
-  email     String?
+  email     String?  @unique
   phone     String?
   instagram String?
   facebook  String?
   avatarUrl String?
-  createdAt DateTime  @default(now())
 
-  projects  Project[]
-  sessions  Session[]
+  createdAt DateTime @default(now())
+
+  projects      Project[]
+  sessions      Session[]
+  resetTokens   PasswordResetToken[]
+  memberships   ProjectMember[]
+
+  invitesSent     ProjectInvite[] @relation("InvitesSent")
+  invitesReceived ProjectInvite[] @relation("InvitesReceived")
+
+  shootDaysCreated ShootDay[] @relation("ShootDaysCreated")
+
+  senderProfiles        ProductionSenderProfile[]
+  productionUpdatesSent ProductionUpdate[] @relation("ProductionUpdatesSent")
 }
 
 model Project {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
+  id                String    @id @default(uuid())
+  name              String
+  clientName        String?
+  projectOrderIndex Int?
+  colorTag          ColorTag?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
 
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  members   ProjectMember[]
+  invites   ProjectInvite[]
+  shootDays ShootDay[]
+
+  entities          ProjectEntity[]
+  senderProfiles    ProductionSenderProfile[]
+  productionUpdates ProductionUpdate[]
+
+  @@index([userId])
+  @@index([projectOrderIndex])
+}
+
+model ProjectMember {
+  id        String      @id @default(uuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(PRODUCER)
+  createdAt DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model ProjectInvite {
+  id        String      @id @default(uuid())
+  token     String      @unique
+  projectId String
+  role      ProjectRole @default(CLIENT)
+
+  invitedByUserId String
+  invitedUserId   String?
+
+  invitedEmail    String?
+  invitedUsername String?
+
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  acceptedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  invitedByUser User  @relation("InvitesSent", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  invitedUser   User? @relation("InvitesReceived", fields: [invitedUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([invitedByUserId])
+  @@index([invitedUserId])
+  @@index([expiresAt])
+
+  @@unique([projectId, invitedUserId])
+  @@unique([projectId, invitedEmail])
+  @@unique([projectId, invitedUsername])
+}
+
+model ShootDay {
+  id              String    @id @default(uuid())
+  projectId       String
+
+  title           String
+  date            DateTime
+  location        String?
+  callTime        String?
+  notes           String?
+  shootOrderIndex Int?
+  colorTag        ColorTag?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  createdByUserId String
+  createdByUser   User    @relation("ShootDaysCreated", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  scenes            Scene[]
+  transitions       Transition[]
+  items             Item[]
+  productionUpdates ProductionUpdate[]
+
+  @@index([projectId])
+  @@index([date])
+  @@index([createdByUserId])
+  @@index([shootOrderIndex])
+}
+
+model Scene {
+  id                String     @id @default(uuid())
+  shootDayId        String
+  shootOrderNumber  Int
+  scriptSceneNumber String?
+  name              String
+  status            ItemStatus @default(OK)
+  description       String?
+  startTime         String?
+  endTime           String?
+  detailsJson       String     @default("{}")
+  colorTag          ColorTag?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @default(now()) @updatedAt
+
+  shootDay        ShootDay         @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  items           Item[]
+  transitionAfter Transition?      @relation("TransitionAfterScene")
+  entityLinks     SceneEntityLink[]
+
+  @@index([shootDayId])
+  @@index([shootOrderNumber])
+  @@unique([shootDayId, shootOrderNumber])
+}
+
+model Transition {
+  id           String   @id @default(uuid())
+  shootDayId   String
+  afterSceneId String   @unique
+  startTime    String?
+  endTime      String?
+  title        String
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  shootDay   ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  afterScene Scene    @relation("TransitionAfterScene", fields: [afterSceneId], references: [id], onDelete: Cascade)
+
+  @@index([shootDayId])
+}
+
+model Item {
+  id          String      @id @default(uuid())
+  shootDayId  String
+  sceneId     String?
+  sectionType SectionType
+  title       String
+  status      ItemStatus  @default(OK)
+  tags        String[]
+  detailsJson String      @default("{}")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  scene    Scene?   @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([shootDayId])
+  @@index([sceneId])
+  @@index([sectionType])
+}
+
+model ProjectEntity {
+  id          String            @id @default(uuid())
+  projectId   String
+  entityType  ProjectEntityType
+  title       String
+  status      ItemStatus        @default(OK)
+  detailsJson String            @default("{}")
+  tags        String[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @default(now()) @updatedAt
+
+  project    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sceneLinks SceneEntityLink[]
+  recipients ProductionUpdateRecipient[]
+
+  @@index([projectId])
+  @@index([entityType])
+}
+
+model SceneEntityLink {
+  id              String   @id @default(uuid())
+  sceneId         String
+  projectEntityId String
+  createdAt       DateTime @default(now())
+
+  scene         Scene         @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  projectEntity ProjectEntity @relation(fields: [projectEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneId, projectEntityId])
+}
+
+model ProductionSenderProfile {
+  id          String   @id @default(uuid())
+  projectId   String
+  userId      String
+  displayName String
+  senderEmail String
+  senderPhone String?
+  senderTitle String?
+  isDefault   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productionUpdates ProductionUpdate[]
+}
+
+model ProductionUpdate {
+  id              String                  @id @default(uuid())
+  projectId       String
+  shootDayId      String?
+  senderProfileId String?
+  sentByUserId    String
+
+  subject     String?
+  messageBody String
+
+  channel ProductionUpdateChannel @default(EMAIL)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  senderProfile ProductionSenderProfile? @relation(fields: [senderProfileId], references: [id], onDelete: SetNull)
+  sentByUser    User                     @relation("ProductionUpdatesSent", fields: [sentByUserId], references: [id], onDelete: Cascade)
+  shootDay      ShootDay?                @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
+
+  recipients ProductionUpdateRecipient[]
+}
+
+model ProductionUpdateRecipient {
+  id                 String                          @id @default(uuid())
+  productionUpdateId String
+  projectEntityId    String
+
+  recipientName  String
+  recipientEmail String?
+  recipientPhone String?
+
+  status ProductionUpdateRecipientStatus @default(PENDING)
+
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  openedAt    DateTime?
+  repliedAt   DateTime?
+
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productionUpdate ProductionUpdate @relation(fields: [productionUpdateId], references: [id], onDelete: Cascade)
+  projectEntity    ProjectEntity    @relation(fields: [projectEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([productionUpdateId, projectEntityId])
 }
 
 model Session {
@@ -40,6 +371,20 @@ model Session {
   userId    String
   createdAt DateTime @default(now())
   expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

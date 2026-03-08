@@ -13,17 +13,16 @@ declare global {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const { setHydrated, loadUsers, seedIfEmpty } = useStore();
+  const { setHydrated, loadUsers } = useStore();
 
   useEffect(() => {
     (async () => {
-      await seedIfEmpty();
       await migrateScenesIfNeeded();
       await migrateOwnerUserIdIfNeeded();
       await loadUsers();
       setHydrated(true);
     })();
-  }, [setHydrated, loadUsers, seedIfEmpty]);
+  }, [setHydrated, loadUsers]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
