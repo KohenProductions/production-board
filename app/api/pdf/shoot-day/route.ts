@@ -4,46 +4,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
-import fs from "fs";
-import path from "path";
 import { renderShootDayHtml } from "@/lib/reports/renderShootDayHtml";
 import type { ShootDayPdfSnapshot } from "@/lib/reports/pdfSnapshotTypes";
-const isProd = process.env.NODE_ENV === "production";
-
-function getLocalChromeExecutablePath() {
-  // macOS Google Chrome default path
-  return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  // If you use Chromium, replace with:
-  // return "/Applications/Chromium.app/Contents/MacOS/Chromium";
-}
-
-async function launchBrowser() {
-  if (!isProd) {
-    return puppeteer.launch({
-      headless: true,
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH || getLocalChromeExecutablePath(),
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-  }
-
-  let executablePath = "";
-  try {
-    const binPath = path.join(process.cwd(), "node_modules/@sparticuz/chromium/bin");
-    executablePath = fs.existsSync(binPath)
-      ? await chromium.executablePath(binPath)
-      : await chromium.executablePath();
-  } catch {
-    executablePath = await chromium.executablePath();
-  }
-
-  return puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath,
-    headless: chromium.headless,
-  });
-}
 
 function getBaseUrl(req: NextRequest): string {
   const proto = req.headers.get("x-forwarded-proto") ?? "https";
@@ -82,7 +44,11 @@ export async function POST(req: NextRequest) {
 
   let browser;
   try {
-    browser = await launchBrowser();
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
 
     const page = await browser.newPage();
     await page.setContent(html, {
