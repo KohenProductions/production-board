@@ -4,6 +4,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
+import fs from "fs";
+import path from "path";
 import { renderShootDayHtml } from "@/lib/reports/renderShootDayHtml";
 import type { ShootDayPdfSnapshot } from "@/lib/reports/pdfSnapshotTypes";
 const isProd = process.env.NODE_ENV === "production";
@@ -19,15 +21,26 @@ async function launchBrowser() {
   if (!isProd) {
     return puppeteer.launch({
       headless: true,
-      executablePath: getLocalChromeExecutablePath(),
+      executablePath:
+        process.env.PUPPETEER_EXECUTABLE_PATH || getLocalChromeExecutablePath(),
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
+  }
+
+  let executablePath = "";
+  try {
+    const binPath = path.join(process.cwd(), "node_modules/@sparticuz/chromium/bin");
+    executablePath = fs.existsSync(binPath)
+      ? await chromium.executablePath(binPath)
+      : await chromium.executablePath();
+  } catch {
+    executablePath = await chromium.executablePath();
   }
 
   return puppeteer.launch({
     args: chromium.args,
     defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
+    executablePath,
     headless: chromium.headless,
   });
 }
