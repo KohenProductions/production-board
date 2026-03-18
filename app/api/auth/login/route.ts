@@ -15,17 +15,18 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const username = String(body?.username ?? "").trim();
+    const usernameLower = username.toLowerCase();
     const password = String(body?.password ?? "");
 
-    if (!username || !password) {
+    if (!usernameLower || !password) {
       return NextResponse.json(
         { error: "Missing username or password" },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { username },
+    const user = await prisma.user.findFirst({
+      where: { username: { equals: usernameLower, mode: "insensitive" } },
     });
 
     // Keep response generic for security

@@ -15,16 +15,17 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const username = String(body?.username ?? "").trim();
+    const usernameLower = username.toLowerCase();
     const password = String(body?.password ?? "");
 
-    if (!username || !password) {
+    if (!usernameLower || !password) {
       return NextResponse.json(
         { error: "חובה למלא שם משתמש וסיסמה" },
         { status: 400 }
       );
     }
 
-    if (username.length < 3) {
+    if (usernameLower.length < 3) {
       return NextResponse.json({ error: "שם משתמש קצר מדי" }, { status: 400 });
     }
 
@@ -32,8 +33,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "סיסמה קצרה מדי" }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({
-      where: { username },
+    const existing = await prisma.user.findFirst({
+      where: { username: { equals: usernameLower, mode: "insensitive" } },
       select: { id: true },
     });
 
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.create({
       data: {
-        username,
+        username: usernameLower,
         password: hashed,
       },
       select: { id: true, username: true },

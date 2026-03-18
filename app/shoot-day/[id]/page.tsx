@@ -65,6 +65,12 @@ type ApiScene = {
   };
 };
 
+type ProjectShootDayOption = {
+  id: string;
+  title: string;
+  date: string;
+};
+
 type ShootDayEditorState = {
   title: string;
   date: string;
@@ -83,6 +89,17 @@ function formatDateForDisplay(iso: string) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function formatDateShort(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+
+  return d.toLocaleDateString("he-IL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   });
 }
 
@@ -179,6 +196,14 @@ export default function ShootDayPage() {
     notes: "",
   });
   const [savingShootDay, setSavingShootDay] = useState(false);
+
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [moveModalSceneId, setMoveModalSceneId] = useState<string | null>(null);
+  const [moveShootDaysLoading, setMoveShootDaysLoading] = useState(false);
+  const [moveShootDays, setMoveShootDays] = useState<ProjectShootDayOption[]>([]);
+  const [moveTargetShootDayId, setMoveTargetShootDayId] = useState<string>("");
+  const [moveSubmitting, setMoveSubmitting] = useState(false);
+  const [moveModalError, setMoveModalError] = useState<string | null>(null);
 
   const loadShootDayPage = useCallback(async () => {
     if (!shootDayId) return;
@@ -303,6 +328,84 @@ export default function ShootDayPage() {
     setEditingShootDay(false);
   }, [shootDay]);
 
+  const openMoveModal = useCallback(
+    async (sceneId: string) => {
+      if (!shootDay?.projectId) return;
+
+      setMoveModalOpen(true);
+      setMoveModalSceneId(sceneId);
+      setMoveModalError(null);
+
+      setMoveShootDaysLoading(true);
+      setMoveShootDays([]);
+      setMoveTargetShootDayId("");
+
+      try {
+        const res = await fetch(`/api/projects/${shootDay.projectId}/shoot-days`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        const json = (await res.json().catch(() => null)) as
+          | { shootDays?: ProjectShootDayOption[]; error?: string }
+          | null;
+
+        if (!res.ok) {
+          throw new Error(json?.error || `Failed to load shoot days (${res.status})`);
+        }
+
+        const otherShootDays = (json?.shootDays ?? [])
+          .filter((d) => d.id !== shootDayId)
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        setMoveShootDays(otherShootDays);
+        setMoveTargetShootDayId(otherShootDays[0]?.id ?? "");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Something went wrong";
+        setMoveModalError(msg);
+      } finally {
+        setMoveShootDaysLoading(false);
+      }
+    },
+    [shootDay?.projectId, shootDayId]
+  );
+
+  const confirmMoveScene = useCallback(async () => {
+    if (!moveModalSceneId) return;
+    if (!moveTargetShootDayId) return;
+
+    setMoveSubmitting(true);
+    setMoveModalError(null);
+
+    try {
+      const res = await fetch(`/api/scenes/${moveModalSceneId}/move`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ targetShootDayId: moveTargetShootDayId }),
+      });
+
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+
+      if (!res.ok) {
+        throw new Error(json?.error || `Failed to move scene (${res.status})`);
+      }
+
+      // Close modal first; the page reload will show the updated scene list.
+      setMoveModalOpen(false);
+      setMoveModalSceneId(null);
+
+      await loadShootDayPage();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Something went wrong";
+      setMoveModalError(msg);
+    } finally {
+      setMoveSubmitting(false);
+    }
+  }, [loadShootDayPage, moveModalSceneId, moveTargetShootDayId]);
+
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center p-8">
@@ -313,7 +416,7 @@ export default function ShootDayPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen p-6 max-w-4xl mx-auto">
+      <main className="min-h-screen px-4 py-6 md:p-6 max-w-4xl mx-auto">
         <Link href={backHref} className="text-blue-600 underline text-sm">
           ← חזרה
         </Link>
@@ -335,7 +438,7 @@ export default function ShootDayPage() {
 
   if (!shootDay) {
     return (
-      <main className="min-h-screen p-6 max-w-4xl mx-auto">
+      <main className="min-h-screen px-4 py-6 md:p-6 max-w-4xl mx-auto">
         <Link href={backHref} className="text-blue-600 underline text-sm">
           ← חזרה
         </Link>
@@ -345,7 +448,7 @@ export default function ShootDayPage() {
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-4xl mx-auto bg-app text-app">
+    <main className="min-h-screen px-4 py-6 md:p-6 max-w-4xl mx-auto bg-app text-app overflow-x-hidden md:overflow-x-visible">
       <Breadcrumbs
         items={[
           { label: "לוח הפקה", href: "/" },
@@ -448,12 +551,12 @@ export default function ShootDayPage() {
                   </label>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 flex-wrap">
+                <div className="mt-4 flex flex-col md:flex-row md:items-center md:flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => void saveShootDayDetails()}
                     disabled={savingShootDay}
-                    className="px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 text-sm"
+                    className="px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 text-sm w-full md:w-auto"
                   >
                     {savingShootDay ? "שומר..." : "שמור"}
                   </button>
@@ -462,7 +565,7 @@ export default function ShootDayPage() {
                     type="button"
                     onClick={backToReadMode}
                     disabled={savingShootDay}
-                    className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 text-sm"
+                    className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 text-sm w-full md:w-auto"
                   >
                     ביטול
                   </button>
@@ -487,12 +590,12 @@ export default function ShootDayPage() {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col md:flex-row md:items-center gap-2">
             {!showAddScene ? (
               <button
                 type="button"
                 onClick={() => setShowAddScene(true)}
-                className="px-4 py-2 btn-primary-app rounded-lg hover:opacity-90"
+                className="px-4 py-2 btn-primary-app rounded-lg hover:opacity-90 w-full md:w-auto"
               >
                 + הוסף סצנה
               </button>
@@ -501,7 +604,7 @@ export default function ShootDayPage() {
             <button
               type="button"
               onClick={loadShootDayPage}
-              className="px-4 py-2 rounded-lg border border-app hover:opacity-90"
+              className="px-4 py-2 rounded-lg border border-app hover:opacity-90 w-full md:w-auto"
             >
               רענן
             </button>
@@ -548,8 +651,20 @@ export default function ShootDayPage() {
                 <li key={scene.id}>
                   <Link
                     href={`/shoot-day/${shootDayId}/scene/${scene.id}`}
-                    className="block p-4 rounded-lg border border-app surface-app hover:shadow-sm hover:opacity-95 transition"
+                    className="relative block p-4 pt-10 pl-10 rounded-lg border border-app surface-app hover:shadow-sm hover:opacity-95 transition"
                   >
+                    <button
+                      type="button"
+                      disabled={moveModalOpen || moveSubmitting}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void openMoveModal(scene.id);
+                      }}
+                      className="absolute top-3 left-3 z-10 whitespace-nowrap px-2 py-1 rounded-md border border-app surface-app text-app text-xs hover:opacity-90 disabled:opacity-50"
+                    >
+                      העבר ליום צילום אחר
+                    </button>
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -608,6 +723,76 @@ export default function ShootDayPage() {
           </ul>
         )}
       </section>
+
+      {moveModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="העברת סצנה ליום צילום אחר"
+          onMouseDown={(e) => {
+            if (moveSubmitting) return;
+            if (e.target === e.currentTarget) setMoveModalOpen(false);
+          }}
+        >
+          <div className="surface-app border border-app rounded-xl shadow-xl max-w-sm w-full p-4" dir="rtl">
+            <h2 className="text-lg font-semibold text-app mb-3">העבר ליום צילום אחר</h2>
+
+            {moveModalError ? (
+              <p className="mb-3 text-sm text-red-600" role="alert">
+                {moveModalError}
+              </p>
+            ) : null}
+
+            <label className="block">
+              <span className="text-sm text-gray-600">בחר יום צילום</span>
+              <select
+                value={moveTargetShootDayId}
+                onChange={(e) => setMoveTargetShootDayId(e.target.value)}
+                disabled={moveShootDaysLoading || moveSubmitting || moveShootDays.length === 0}
+                className="mt-1 w-full border border-gray-300 rounded px-3 py-2 bg-white text-black"
+              >
+                {moveShootDaysLoading ? <option value="">טוען...</option> : null}
+
+                {moveShootDays.length === 0 && !moveShootDaysLoading ? (
+                  <option value="">אין ימי צילום נוספים</option>
+                ) : null}
+
+                {moveShootDays.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.title} · {formatDateShort(d.date)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="mt-4 flex flex-col sm:flex-row sm:justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (moveSubmitting) return;
+                  setMoveModalOpen(false);
+                  setMoveModalSceneId(null);
+                  setMoveModalError(null);
+                }}
+                disabled={moveSubmitting}
+                className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 text-sm w-full sm:w-auto"
+              >
+                ביטול
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void confirmMoveScene()}
+                disabled={moveSubmitting || moveShootDaysLoading || !moveTargetShootDayId}
+                className="px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 text-sm w-full sm:w-auto"
+              >
+                {moveSubmitting ? "מזיז..." : "אשר העברה"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -258,7 +258,7 @@ export default function ScenePage() {
 
   if (error) {
     return (
-      <main className="min-h-screen p-6 max-w-5xl mx-auto">
+      <main className="min-h-screen px-4 py-6 md:p-6 max-w-5xl mx-auto">
         <Link href={backHref} className="text-blue-600 underline text-sm">
           ← חזרה
         </Link>
@@ -280,7 +280,7 @@ export default function ScenePage() {
 
   if (!scene || !draft) {
     return (
-      <main className="min-h-screen p-6 max-w-5xl mx-auto">
+      <main className="min-h-screen px-4 py-6 md:p-6 max-w-5xl mx-auto">
         <Link href={backHref} className="text-blue-600 underline text-sm">
           ← חזרה
         </Link>
@@ -290,7 +290,7 @@ export default function ScenePage() {
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-5xl mx-auto bg-app text-app">
+    <main className="min-h-screen px-4 py-6 md:p-6 max-w-5xl mx-auto bg-app text-app overflow-x-hidden md:overflow-x-visible">
      <Breadcrumbs
   items={[
     { label: "לוח הפקה", href: "/" },
@@ -329,12 +329,12 @@ export default function ScenePage() {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-2">
             <button
               type="button"
               onClick={() => void duplicateScene()}
               disabled={duplicating || saving}
-              className="px-4 py-2 rounded-lg border border-app hover:opacity-90 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg border border-app hover:opacity-90 disabled:opacity-50 w-full md:w-auto"
             >
               {duplicating ? "משכפל..." : "שכפל סצנה"}
             </button>
@@ -343,7 +343,7 @@ export default function ScenePage() {
               type="button"
               onClick={handleBackClick}
               disabled={saving || duplicating}
-              className="px-4 py-2 rounded-lg border border-app hover:opacity-90 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg border border-app hover:opacity-90 disabled:opacity-50 w-full md:w-auto"
             >
               ביטול
             </button>
@@ -352,7 +352,7 @@ export default function ScenePage() {
               type="button"
               onClick={saveAndExit}
               disabled={saving || duplicating || !hasChanges}
-              className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 w-full md:w-auto"
             >
               {saving ? "שומר..." : "אישור שינויים"}
             </button>
