@@ -6,8 +6,6 @@ import { useParams } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AddShootDayForm } from "@/components/AddShootDayForm";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { fetchProjectPdf } from "@/lib/reports/fetchPdfFromApi";
-import { downloadBlob } from "@/components/reports/pdfDownload";
 
 type ApiProject = {
   id: string;
@@ -746,17 +744,7 @@ setShootDays(shootDaysJson.shootDays ?? []);
     setExportingReport(true);
     setError(null);
     try {
-      const res = await fetch(`/api/projects/${projectId}/report-snapshot`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error || "Failed to load report snapshot");
-      }
-      const snapshot = await res.json();
-      const { blob, filename } = await fetchProjectPdf(snapshot);
-      downloadBlob(blob, filename);
+      window.open(`/project/${projectId}/report/print`, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {
@@ -884,7 +872,7 @@ setShootDays(shootDaysJson.shootDays ?? []);
             className="flex items-center gap-2 px-4 py-2 rounded-lg border border-app hover:opacity-90 disabled:opacity-50 w-full md:w-auto justify-center md:justify-start"
           >
             <FileDown size={18} />
-            {exportingReport ? "מייצא..." : "ייצא דוח הפקה"}
+            {exportingReport ? "פותח..." : "הדפס / שמור PDF"}
           </button>
           {!showAddShootDay ? (
             <button

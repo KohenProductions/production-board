@@ -3,8 +3,24 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { AddSceneForm } from "@/components/AddSceneForm";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import {
+  DndContext,
+  closestCenter,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type ApiProject = {
   id: string;
@@ -271,6 +287,66 @@ export default function ShootDayPage() {
   const sortedScenes = useMemo(() => {
     return [...scenes].sort((a, b) => a.shootOrderNumber - b.shootOrderNumber);
   }, [scenes]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
+
+  const handleScenesDragEnd = useCallback(
+    async ({ active, over }: DragEndEvent) => {
+      if (!over) return;
+      if (moveModalOpen || moveSubmitting) return;
+
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      if (activeId === overId) return;
+
+      const currentSorted = [...scenes].sort(
+        (a, b) => a.shootOrderNumber - b.shootOrderNumber
+      );
+      const oldIndex = currentSorted.findIndex((s) => s.id === activeId);
+      const newIndex = currentSorted.findIndex((s) => s.id === overId);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(currentSorted, oldIndex, newIndex).map((s, i) => {
+        return { ...s, shootOrderNumber: i + 1 };
+      });
+
+      // Immediate UI feedback.
+      setScenes(reordered);
+
+      try {
+        const orderedSceneIds = reordered.map((s) => s.id);
+        const res = await fetch(
+          `/api/shoot-days/${shootDayId}/scenes/reorder`,
+          {
+            method: "PATCH",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ orderedSceneIds }),
+          }
+        );
+
+        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+
+        if (!res.ok) {
+          throw new Error(json?.error || `Failed to reorder scenes (${res.status})`);
+        }
+
+        // Ensure order is consistent with server.
+        await loadShootDayPage();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Something went wrong";
+        window.alert(msg);
+        await loadShootDayPage();
+      }
+    },
+    [loadShootDayPage, moveModalOpen, moveSubmitting, scenes, shootDayId]
+  );
 
   const saveShootDayDetails = useCallback(async () => {
     if (!shootDay?.id) return;
@@ -642,85 +718,30 @@ export default function ShootDayPage() {
             עדיין אין סצנות ליום הצילום הזה.
           </div>
         ) : (
-          <ul className="space-y-3">
-            {sortedScenes.map((scene, idx) => {
-              const locationPreview = buildLocationPreview(scene);
-              const talentPreview = buildTalentPreview(scene);
-
-              return (
-                <li key={scene.id}>
-                  <Link
-                    href={`/shoot-day/${shootDayId}/scene/${scene.id}`}
-                    className="relative block p-4 pt-10 pl-10 rounded-lg border border-app surface-app hover:shadow-sm hover:opacity-95 transition"
-                  >
-                    <button
-                      type="button"
-                      disabled={moveModalOpen || moveSubmitting}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void openMoveModal(scene.id);
-                      }}
-                      className="absolute top-3 left-3 z-10 whitespace-nowrap px-2 py-1 rounded-md border border-app surface-app text-app text-xs hover:opacity-90 disabled:opacity-50"
-                    >
-                      העבר ליום צילום אחר
-                    </button>
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm text-gray-500">
-                            סצנה {idx + 1}
-                          </span>
-
-                          {scene.scriptSceneNumber ? (
-                            <span className="text-sm text-gray-500">
-                              · תסריט {scene.scriptSceneNumber}
-                            </span>
-                          ) : null}
-
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full ${statusClasses(scene.status)}`}
-                          >
-                            {statusLabel(scene.status)}
-                          </span>
-                        </div>
-
-                        <div className="font-medium text-base mt-2">{scene.name}</div>
-
-                        {scene.description ? (
-                          <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
-                            {scene.description}
-                          </div>
-                        ) : null}
-
-                        {locationPreview ? (
-                          <div className="text-sm text-gray-600 mt-3">
-                            לוקיישן: {locationPreview}
-                          </div>
-                        ) : null}
-
-                        {talentPreview ? (
-                          <div className="text-sm text-gray-600 mt-1">
-                            שחקנים: {talentPreview}
-                          </div>
-                        ) : null}
-
-                        {(scene.startTime || scene.endTime) && (
-                          <div className="text-sm text-gray-600 mt-3">
-                            {scene.startTime ? <span>התחלה: {scene.startTime}</span> : null}
-                            {scene.startTime && scene.endTime ? (
-                              <span className="mx-2">·</span>
-                            ) : null}
-                            {scene.endTime ? <span>סיום: {scene.endTime}</span> : null}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleScenesDragEnd}
+          >
+            <SortableContext
+              items={sortedScenes.map((s) => String(s.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="space-y-3">
+                {sortedScenes.map((scene, idx) => (
+                  <SortableSceneItem
+                    key={scene.id}
+                    scene={scene}
+                    idx={idx}
+                    shootDayId={shootDayId}
+                    openMoveModal={openMoveModal}
+                    moveModalOpen={moveModalOpen}
+                    moveSubmitting={moveSubmitting}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
         )}
       </section>
 
@@ -794,5 +815,125 @@ export default function ShootDayPage() {
         </div>
       ) : null}
     </main>
+  );
+}
+
+function SortableSceneItem({
+  scene,
+  idx,
+  shootDayId,
+  openMoveModal,
+  moveModalOpen,
+  moveSubmitting,
+}: {
+  scene: ApiScene;
+  idx: number;
+  shootDayId: string;
+  openMoveModal: (sceneId: string) => void | Promise<void>;
+  moveModalOpen: boolean;
+  moveSubmitting: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: String(scene.id),
+    disabled: moveModalOpen || moveSubmitting,
+  });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  const locationPreview = buildLocationPreview(scene);
+  const talentPreview = buildTalentPreview(scene);
+
+  return (
+    <li ref={setNodeRef} style={style}>
+      <Link
+        href={`/shoot-day/${shootDayId}/scene/${scene.id}`}
+        className="relative block p-4 pt-10 pl-10 rounded-lg border border-app surface-app hover:shadow-sm hover:opacity-95 transition"
+      >
+        <button
+          type="button"
+          disabled={moveModalOpen || moveSubmitting}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void openMoveModal(scene.id);
+          }}
+          className="absolute top-3 left-3 z-10 whitespace-nowrap px-2 py-1 rounded-md border border-app surface-app text-app text-xs hover:opacity-90 disabled:opacity-50"
+        >
+          העבר ליום צילום אחר
+        </button>
+
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                {...attributes}
+                {...listeners}
+                className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none"
+                onClick={(e) => e.preventDefault()}
+              >
+                ⋮⋮
+              </span>
+
+              <span className="text-sm text-gray-500">סצנה {idx + 1}</span>
+
+              {scene.scriptSceneNumber ? (
+                <span className="text-sm text-gray-500">
+                  · תסריט {scene.scriptSceneNumber}
+                </span>
+              ) : null}
+
+              <span
+                className={`text-xs px-2 py-1 rounded-full ${statusClasses(
+                  scene.status
+                )}`}
+              >
+                {statusLabel(scene.status)}
+              </span>
+            </div>
+
+            <div className="font-medium text-base mt-2">{scene.name}</div>
+
+            {scene.description ? (
+              <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
+                {scene.description}
+              </div>
+            ) : null}
+
+            {locationPreview ? (
+              <div className="text-sm text-gray-600 mt-3">
+                לוקיישן: {locationPreview}
+              </div>
+            ) : null}
+
+            {talentPreview ? (
+              <div className="text-sm text-gray-600 mt-1">
+                שחקנים: {talentPreview}
+              </div>
+            ) : null}
+
+            {(scene.startTime || scene.endTime) && (
+              <div className="text-sm text-gray-600 mt-3">
+                {scene.startTime ? <span>התחלה: {scene.startTime}</span> : null}
+                {scene.startTime && scene.endTime ? (
+                  <span className="mx-2">·</span>
+                ) : null}
+                {scene.endTime ? <span>סיום: {scene.endTime}</span> : null}
+              </div>
+            )}
+          </div>
+        </div>
+      </Link>
+    </li>
   );
 }
