@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import { renderShootDayHtml } from "@/lib/reports/renderShootDayHtml";
 import type { ShootDayPdfSnapshot } from "@/lib/reports/pdfSnapshotTypes";
 
@@ -42,13 +42,17 @@ export async function POST(req: NextRequest) {
   const baseUrl = getBaseUrl(req);
   const html = renderShootDayHtml(snapshot, baseUrl);
 
+  const browserlessToken = process.env.BROWSERLESS_TOKEN?.trim();
+  if (!browserlessToken) {
+    console.error("[pdf/shoot-day] BROWSERLESS_TOKEN is missing");
+    return NextResponse.json({ error: "BROWSERLESS_TOKEN is missing" }, { status: 500 });
+  }
+
+  const browserWSEndpoint = `wss://production-sfo.browserless.io?token=${browserlessToken}`;
+
   let browser;
   try {
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    });
+    browser = await puppeteer.connect({ browserWSEndpoint });
 
     const page = await browser.newPage();
     await page.setContent(html, {
