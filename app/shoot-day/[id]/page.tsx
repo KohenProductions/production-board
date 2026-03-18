@@ -67,6 +67,7 @@ type ApiScene = {
 
 type ShootDayEditorState = {
   title: string;
+  date: string;
   location: string;
   callTime: string;
   notes: string;
@@ -140,10 +141,23 @@ function buildTalentPreview(scene: ApiScene): string {
 function buildShootDayEditor(shootDay: ApiShootDay): ShootDayEditorState {
   return {
     title: shootDay.title ?? "",
+    date: toDateTimeLocalValue(shootDay.date ?? ""),
     location: shootDay.location ?? "",
     callTime: shootDay.callTime ?? "",
     notes: shootDay.notes ?? "",
   };
+}
+
+function toDateTimeLocalValue(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const min = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 }
 
 export default function ShootDayPage() {
@@ -159,6 +173,7 @@ export default function ShootDayPage() {
   const [editingShootDay, setEditingShootDay] = useState(false);
   const [shootDayEditor, setShootDayEditor] = useState<ShootDayEditorState>({
     title: "",
+    date: "",
     location: "",
     callTime: "",
     notes: "",
@@ -204,6 +219,7 @@ export default function ShootDayPage() {
           ? buildShootDayEditor(shootDayJson.shootDay)
           : {
               title: "",
+              date: "",
               location: "",
               callTime: "",
               notes: "",
@@ -227,6 +243,10 @@ export default function ShootDayPage() {
     return "/";
   }, [shootDay?.projectId]);
 
+  const sortedScenes = useMemo(() => {
+    return [...scenes].sort((a, b) => a.shootOrderNumber - b.shootOrderNumber);
+  }, [scenes]);
+
   const saveShootDayDetails = useCallback(async () => {
     if (!shootDay?.id) return;
 
@@ -248,6 +268,7 @@ export default function ShootDayPage() {
         },
         body: JSON.stringify({
           title: nextTitle,
+          date: shootDayEditor.date ? new Date(shootDayEditor.date).toISOString() : undefined,
           location: shootDayEditor.location.trim() || null,
           callTime: shootDayEditor.callTime.trim() || null,
           notes: shootDayEditor.notes.trim() || null,
@@ -368,6 +389,19 @@ export default function ShootDayPage() {
                       value={shootDayEditor.title}
                       onChange={(e) =>
                         setShootDayEditor((prev) => ({ ...prev, title: e.target.value }))
+                      }
+                      disabled={savingShootDay}
+                      className="mt-1 w-full border border-gray-300 rounded px-3 py-2 bg-white text-black"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm text-gray-600">תאריך ושעה</span>
+                    <input
+                      type="datetime-local"
+                      value={shootDayEditor.date}
+                      onChange={(e) =>
+                        setShootDayEditor((prev) => ({ ...prev, date: e.target.value }))
                       }
                       disabled={savingShootDay}
                       className="mt-1 w-full border border-gray-300 rounded px-3 py-2 bg-white text-black"
@@ -497,16 +531,16 @@ export default function ShootDayPage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-lg font-semibold">סצנות</h2>
-          <div className="text-sm text-gray-500">סה״כ {scenes.length} סצנות</div>
+          <div className="text-sm text-gray-500">סה״כ {sortedScenes.length} סצנות</div>
         </div>
 
-        {scenes.length === 0 ? (
+        {sortedScenes.length === 0 ? (
           <div className="p-4 border border-dashed border-gray-300 rounded-lg text-gray-500 text-sm">
             עדיין אין סצנות ליום הצילום הזה.
           </div>
         ) : (
           <ul className="space-y-3">
-            {scenes.map((scene) => {
+            {sortedScenes.map((scene, idx) => {
               const locationPreview = buildLocationPreview(scene);
               const talentPreview = buildTalentPreview(scene);
 
@@ -520,7 +554,7 @@ export default function ShootDayPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm text-gray-500">
-                            סצנה #{scene.shootOrderNumber}
+                            סצנה {idx + 1}
                           </span>
 
                           {scene.scriptSceneNumber ? (

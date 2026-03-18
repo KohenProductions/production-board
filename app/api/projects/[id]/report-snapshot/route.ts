@@ -200,6 +200,22 @@ export async function GET(
       },
     });
 
+    const projectEntities = await prisma.projectEntity.findMany({
+      where: {
+        projectId,
+        entityType: "CREW",
+      },
+      orderBy: [{ title: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        projectId: true,
+        entityType: true,
+        title: true,
+        status: true,
+        detailsJson: true,
+      },
+    });
+
     const dayData: ProjectPdfSnapshot["dayData"] = {};
 
     for (const day of shootDays) {
@@ -254,16 +270,61 @@ export async function GET(
         }),
       ]);
 
+      const sceneIds = scenes.map((s) => s.id);
+      const sceneEntityLinks =
+        sceneIds.length === 0
+          ? []
+          : await prisma.sceneEntityLink.findMany({
+              where: {
+                sceneId: { in: sceneIds },
+              },
+              orderBy: [{ createdAt: "asc" }, { projectEntity: { title: "asc" } }],
+              select: {
+                id: true,
+                sceneId: true,
+                projectEntity: {
+                  select: {
+                    id: true,
+                    projectId: true,
+                    entityType: true,
+                    title: true,
+                    status: true,
+                    detailsJson: true,
+                  },
+                },
+              },
+            });
+
       dayData[day.id] = {
         scenes: scenes.map(toScene),
         items: items.map(toItemRecord),
         transitions: transitions.map(toTransition),
+        sceneEntityLinks: sceneEntityLinks.map((l) => ({
+          id: l.id,
+          sceneId: l.sceneId,
+          projectEntity: {
+            id: l.projectEntity.id,
+            projectId: l.projectEntity.projectId,
+            entityType: l.projectEntity.entityType,
+            title: l.projectEntity.title,
+            status: l.projectEntity.status,
+            detailsJson: l.projectEntity.detailsJson,
+          },
+        })),
       };
     }
 
     const snapshot: ProjectPdfSnapshot = {
       project: toProject(project),
       shootDays: shootDays.map(toShootDay),
+      projectEntities: projectEntities.map((e) => ({
+        id: e.id,
+        projectId: e.projectId,
+        entityType: e.entityType,
+        title: e.title,
+        status: e.status,
+        detailsJson: e.detailsJson,
+      })),
       dayData,
     };
 

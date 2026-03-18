@@ -148,6 +148,7 @@ export async function PATCH(
 
   let body: {
     title?: string;
+    date?: string;
     location?: string | null;
     callTime?: string | null;
     notes?: string | null;
@@ -161,6 +162,7 @@ export async function PATCH(
 
   const data: {
     title?: string;
+    date?: Date;
     location?: string | null;
     callTime?: string | null;
     notes?: string | null;
@@ -176,6 +178,15 @@ export async function PATCH(
 
   if (Object.prototype.hasOwnProperty.call(body, "location")) {
     data.location = normalizeNullableString(body.location);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "date")) {
+    const raw = typeof body.date === "string" ? body.date.trim() : "";
+    const parsed = raw ? new Date(raw) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    }
+    data.date = parsed;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "callTime")) {

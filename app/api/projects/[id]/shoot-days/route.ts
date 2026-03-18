@@ -71,6 +71,16 @@ export async function GET(
           avatarUrl: true,
         },
       },
+      scenes: {
+        orderBy: { shootOrderNumber: "asc" },
+        select: {
+          id: true,
+          shootOrderNumber: true,
+          scriptSceneNumber: true,
+          name: true,
+          status: true,
+        },
+      },
     },
   });
 

@@ -1,11 +1,13 @@
 "use client";
 
-import { Pencil, Trash2, X, MapPin } from "lucide-react";
+import { CalendarPlus, FileDown, FileText, Pencil, Trash2, X, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AddShootDayForm } from "@/components/AddShootDayForm";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { fetchProjectPdf } from "@/lib/reports/fetchPdfFromApi";
+import { downloadBlob } from "@/components/reports/pdfDownload";
 
 type ApiProject = {
   id: string;
@@ -23,6 +25,14 @@ type ApiUserLite = {
   avatarUrl: string | null;
 };
 
+type ApiScenePreview = {
+  id: string;
+  shootOrderNumber: number;
+  scriptSceneNumber: string | null;
+  name: string;
+  status: "OK" | "MISSING" | "BLOCKED";
+};
+
 type ApiShootDay = {
   id: string;
   projectId: string;
@@ -33,6 +43,7 @@ type ApiShootDay = {
   notes: string | null;
   createdAt: string;
   createdByUser: ApiUserLite;
+  scenes?: ApiScenePreview[];
 };
 
 type ApiProjectEntity = {
@@ -263,16 +274,17 @@ export default function ProjectPage() {
   const [openHumanGroup, setOpenHumanGroup] = useState<HumanGroupKey | null>(null);
 
   const [locationEditor, setLocationEditor] = useState<LocationEditorState | null>(null);
-const [savingLocation, setSavingLocation] = useState(false);
-const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
-const [openLocations, setOpenLocations] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
+  const [openLocations, setOpenLocations] = useState(false);
 
-const [editingProjectName, setEditingProjectName] = useState(false);
-const [projectNameDraft, setProjectNameDraft] = useState("");
-const [savingProjectName, setSavingProjectName] = useState(false);
-const [editingClientName, setEditingClientName] = useState(false);
-const [clientNameDraft, setClientNameDraft] = useState("");
-const [savingClientName, setSavingClientName] = useState(false);
+  const [editingProjectName, setEditingProjectName] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState("");
+  const [savingProjectName, setSavingProjectName] = useState(false);
+  const [editingClientName, setEditingClientName] = useState(false);
+  const [clientNameDraft, setClientNameDraft] = useState("");
+  const [savingClientName, setSavingClientName] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
   const loadAll = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
@@ -380,7 +392,7 @@ setShootDays(shootDaysJson.shootDays ?? []);
 
   const sortedShootDays = useMemo(() => {
     return [...shootDays].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
   }, [shootDays]);
 
@@ -728,6 +740,29 @@ setShootDays(shootDaysJson.shootDays ?? []);
       setSavingClientName(false);
     }
   }, [project?.id, clientNameDraft]);
+
+  const exportProductionReport = useCallback(async () => {
+    if (!projectId) return;
+    setExportingReport(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/report-snapshot`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        throw new Error(j?.error || "Failed to load report snapshot");
+      }
+      const snapshot = await res.json();
+      const { blob, filename } = await fetchProjectPdf(snapshot);
+      downloadBlob(blob, filename);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExportingReport(false);
+    }
+  }, [projectId]);
   
   if (loading) {
     return (
@@ -779,80 +814,88 @@ setShootDays(shootDaysJson.shootDays ?? []);
       ]}
     />
       <header className="mb-6 flex items-start justify-between gap-3 flex-wrap">
-      <div>
-  <Link href="/" className="text-app opacity-70 text-sm hover:underline">
-    ← כל הפרויקטים
-  </Link>
+        <div>
+          <Link href="/" className="text-app opacity-70 text-sm hover:underline">
+            ← כל הפרויקטים
+          </Link>
 
-  {!editingProjectName ? (
-    <div className="mt-1 flex items-center gap-2 flex-wrap">
-      <h1 className="text-2xl font-bold text-app">{project.name}</h1>
+          {!editingProjectName ? (
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-app">{project.name}</h1>
 
-      <button
-        type="button"
-        onClick={() => {
-          setProjectNameDraft(project.name ?? "");
-          setEditingProjectName(true);
-        }}
-        className="flex items-center gap-1 text-sm px-2 py-1 rounded-md text-gray-600 hover:bg-gray-100"
-      >
-        <Pencil size={15} strokeWidth={1.8} />
-        ערוך
-      </button>
-    </div>
-  ) : (
-    
-    <div className="mt-2 flex items-center gap-2 flex-wrap">
-      <input
-        type="text"
-        value={projectNameDraft}
-        onChange={(e) => setProjectNameDraft(e.target.value)}
-        disabled={savingProjectName}
-        className="w-full max-w-md border border-gray-300 rounded px-3 py-2 bg-white text-black"
-      />
+              <button
+                type="button"
+                onClick={() => {
+                  setProjectNameDraft(project.name ?? "");
+                  setEditingProjectName(true);
+                }}
+                className="flex items-center gap-1 text-sm px-2 py-1 rounded-md text-gray-600 hover:bg-gray-100"
+              >
+                <Pencil size={15} strokeWidth={1.8} />
+                ערוך
+              </button>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <input
+                type="text"
+                value={projectNameDraft}
+                onChange={(e) => setProjectNameDraft(e.target.value)}
+                disabled={savingProjectName}
+                className="w-full max-w-md border border-gray-300 rounded px-3 py-2 bg-white text-black"
+              />
 
-      <button
-        type="button"
-        onClick={() => void saveProjectName()}
-        disabled={savingProjectName}
-        className="px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 text-sm"
-      >
-        {savingProjectName ? "שומר..." : "שמור"}
-      </button>
+              <button
+                type="button"
+                onClick={() => void saveProjectName()}
+                disabled={savingProjectName}
+                className="px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 text-sm"
+              >
+                {savingProjectName ? "שומר..." : "שמור"}
+              </button>
 
-      <button
-        type="button"
-        onClick={() => {
-          setProjectNameDraft(project.name ?? "");
-          setEditingProjectName(false);
-        }}
-        disabled={savingProjectName}
-        className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 text-sm"
-      >
-        ביטול
-      </button>
-    </div>
-  )}
-</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setProjectNameDraft(project.name ?? "");
+                  setEditingProjectName(false);
+                }}
+                disabled={savingProjectName}
+                className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 text-sm"
+              >
+                ביטול
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href={`/project/${projectId}/proposals/new`}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-app hover:opacity-90"
+          >
+            <FileText size={18} />
+            צור הצעת מחיר
+          </Link>
+          <button
+            type="button"
+            onClick={() => void exportProductionReport()}
+            disabled={exportingReport}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-app hover:opacity-90 disabled:opacity-50"
+          >
+            <FileDown size={18} />
+            {exportingReport ? "מייצא..." : "ייצא דוח הפקה"}
+          </button>
           {!showAddShootDay ? (
             <button
               type="button"
               onClick={() => setShowAddShootDay(true)}
-              className="px-4 py-2 btn-primary-app rounded-lg hover:opacity-90"
+              className="flex items-center gap-2 px-4 py-2 btn-primary-app rounded-lg hover:opacity-90"
             >
-              + הוסף יום צילום
+              <CalendarPlus size={18} />
+              הוסף יום צילום
             </button>
           ) : null}
-
-          <button
-            type="button"
-            onClick={loadAll}
-            className="px-4 py-2 rounded-lg border border-app hover:opacity-90"
-          >
-            רענן
-          </button>
         </div>
       </header>
 
@@ -1416,41 +1459,67 @@ setShootDays(shootDaysJson.shootDays ?? []);
           </div>
         ) : (
           <ul className="space-y-2">
-            {sortedShootDays.map((d) => (
-              <li key={d.id}>
-                <Link
-                  href={`/shoot-day/${d.id}`}
-                  className="block p-4 surface-app border border-app rounded-lg hover:shadow-sm hover:border-gray-300 transition cursor-pointer"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{d.title}</div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {formatDateForDisplay(d.date)}
+            {sortedShootDays.map((d) => {
+              const sceneList = d.scenes ?? [];
+              const previewLimit = 5;
+              const previewScenes = sceneList.slice(0, previewLimit);
+              const restCount = sceneList.length - previewLimit;
+              return (
+                <li key={d.id}>
+                  <Link
+                    href={`/shoot-day/${d.id}`}
+                    className="block p-4 surface-app border border-app rounded-lg hover:shadow-sm hover:border-gray-300 transition cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium">{d.title}</div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {formatDateForDisplay(d.date)}
+                        </div>
+
+                        {(d.location || d.callTime) && (
+                          <div className="text-sm text-gray-600 mt-2">
+                            {d.location ? <span>{d.location}</span> : null}
+                            {d.location && d.callTime ? <span className="mx-2">·</span> : null}
+                            {d.callTime ? <span>Call Time: {d.callTime}</span> : null}
+                          </div>
+                        )}
+
+                        {sceneList.length > 0 ? (
+                          <div className="mt-2 pt-2 border-t border-gray-200/80">
+                            <div className="text-xs text-gray-500 mb-1">סצינות</div>
+                            <ul className="space-y-0.5">
+                              {previewScenes.map((s) => (
+                                <li key={s.id} className="text-sm text-gray-700 truncate">
+                                  {s.scriptSceneNumber
+                                    ? `${s.scriptSceneNumber} · ${s.name || "—"}`
+                                    : s.name || "—"}
+                                </li>
+                              ))}
+                              {restCount > 0 ? (
+                                <li className="text-xs text-gray-500">
+                                  + עוד {restCount}
+                                </li>
+                              ) : null}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        {d.notes ? (
+                          <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
+                            {d.notes}
+                          </div>
+                        ) : null}
                       </div>
 
-                      {(d.location || d.callTime) && (
-                        <div className="text-sm text-gray-600 mt-2">
-                          {d.location ? <span>{d.location}</span> : null}
-                          {d.location && d.callTime ? <span className="mx-2">·</span> : null}
-                          {d.callTime ? <span>Call Time: {d.callTime}</span> : null}
-                        </div>
-                      )}
-
-                      {d.notes ? (
-                        <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
-                          {d.notes}
-                        </div>
-                      ) : null}
+                      <div className="text-xs text-gray-500">
+                        נוצר ע״י {d.createdByUser.username}
+                      </div>
                     </div>
-
-                    <div className="text-xs text-gray-500">
-                      נוצר ע״י {d.createdByUser.username}
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

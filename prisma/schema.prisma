@@ -70,6 +70,14 @@ enum ProductionUpdateRecipientStatus {
   REPLIED
 }
 
+enum ProposalStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
 model User {
   id        String   @id @default(uuid())
   username  String   @unique
@@ -118,6 +126,7 @@ model Project {
   members   ProjectMember[]
   invites   ProjectInvite[]
   shootDays ShootDay[]
+  proposals Proposal[]
 
   entities          ProjectEntity[]
   senderProfiles    ProductionSenderProfile[]
@@ -140,6 +149,100 @@ model ProjectMember {
   @@unique([projectId, userId])
   @@index([projectId])
   @@index([userId])
+}
+
+model Proposal {
+  id          String         @id @default(uuid())
+  projectId   String
+  title       String
+  status      ProposalStatus @default(DRAFT)
+
+  documentDescription String?
+  businessName        String?
+  businessEmail       String?
+  businessPhone       String?
+  businessAddress     String?
+  logoUrl             String?
+
+  clientName  String?
+  clientEmail String?
+  clientPhone String?
+
+  proposalNumber String?
+  issueDate      DateTime?
+  validUntil     DateTime?
+  currency       String   @default("ILS")
+  vatRate        Decimal  @default(18)
+  sentAt         DateTime?
+
+  publicShareToken String?
+  isPublicShared   Boolean  @default(false)
+  publicSharedAt   DateTime?
+
+  freeTextContent  String?
+  notesInternal    String?
+  paymentTerms     String?
+  paymentTermsNote String?
+  footerText       String?
+
+  subtotal    Decimal @default(0)
+  vatAmount   Decimal @default(0)
+  totalAmount Decimal @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items         ProposalItem[]
+  timelineSteps ProposalTimelineStep[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([updatedAt])
+  @@unique([publicShareToken])
+}
+
+model ProposalItem {
+  id         String  @id @default(uuid())
+  proposalId String
+
+  name        String
+  description String?
+  category    String?
+
+  quantity     Decimal @default(0)
+  unitPrice    Decimal @default(0)
+  vatRate      Decimal @default(0)
+  lineSubtotal Decimal @default(0)
+  lineVat      Decimal @default(0)
+  lineTotal    Decimal @default(0)
+  sortOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@index([sortOrder])
+}
+
+model ProposalTimelineStep {
+  id         String   @id @default(uuid())
+  proposalId String
+
+  title       String
+  description String?
+  targetDate  DateTime?
+  sortOrder   Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@index([sortOrder])
 }
 
 model ProjectInvite {
